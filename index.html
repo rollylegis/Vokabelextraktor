@@ -631,7 +631,6 @@
                 let sheetId = await findSheet(sheetName, targetFolderId);
                 if (!sheetId) {
                     sheetId = await createSheet(sheetName, targetFolderId);
-                    await appendData(sheetId, [[langName, "Deutsch"]]); 
                 }
                 const values = data.vocabulary.map(v => [v.source, v.german]);
                 await appendData(sheetId, values);
@@ -645,7 +644,6 @@
                 let sheetId = await findSheet(sheetName, targetFolderId);
                  if (!sheetId) {
                     sheetId = await createSheet(sheetName, targetFolderId);
-                    await appendData(sheetId, [[langName, "Deutsch"]]);
                 }
                 const values = data.sentences.map(s => [s.source, s.german]);
                 await appendData(sheetId, values);
