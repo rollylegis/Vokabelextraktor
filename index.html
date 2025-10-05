@@ -8,6 +8,9 @@
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Cropper.js für die Zuschneide-Funktion -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" defer></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -24,6 +27,10 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        /* Stellt sicher, dass das Cropper-Bild nicht zu groß wird */
+        #camera-preview-image-container > img {
+            max-width: 100%;
         }
     </style>
 </head>
@@ -107,6 +114,22 @@
             <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
         </footer>
     </div>
+    
+    <!-- Modal for Camera Preview and Cropping -->
+    <div id="camera-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-3xl w-full">
+            <h2 class="text-2xl font-bold mb-4 text-center">Bild anpassen</h2>
+            <div id="camera-preview-image-container" class="mb-4 max-h-[60vh] overflow-hidden bg-gray-200">
+                <img id="camera-preview-image" src="" alt="Kameravorschau">
+            </div>
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+                <button id="retake-photo-button" class="w-full sm:w-auto cursor-pointer bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Neu aufnehmen</button>
+                <button id="add-to-queue-button" class="w-full sm:w-auto cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Zur Warteschlange</button>
+                <button id="cancel-crop-button" class="w-full sm:w-auto cursor-pointer bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
 
 <script type="text/javascript">
     window.onload = function() {
@@ -132,7 +155,6 @@
             copyBtn.disabled = true;
         }
 
-        // Load keys from localStorage
         const savedApiKey = localStorage.getItem('vokabelAppApiKey');
         const savedClientId = localStorage.getItem('vokabelAppClientId');
         if (savedApiKey) {
@@ -163,10 +185,18 @@
     const resultsContainer = document.getElementById('results-container');
     const resultLinks = document.getElementById('result-links');
     
+    // Modal elements
+    const cameraModal = document.getElementById('camera-modal');
+    const cameraPreviewImage = document.getElementById('camera-preview-image');
+    const retakePhotoButton = document.getElementById('retake-photo-button');
+    const addToQueueButton = document.getElementById('add-to-queue-button');
+    const cancelCropButton = document.getElementById('cancel-crop-button');
+
     let gapiInited = false;
     let gisInited = false;
     let tokenClient;
     let fileQueue = [];
+    let cropper;
     
     const SCOPES = 'https://www.googleapis.com/auth/drive';
 
@@ -201,7 +231,6 @@
     function maybeEnableButtons() {
         if (gapiInited && gisInited) {
             authorizeButton.disabled = false;
-            // Versuch der automatischen Anmeldung, wenn beide Bibliotheken geladen sind
             trySilentSignIn();
         }
     }
@@ -216,10 +245,8 @@
                 scope: SCOPES,
                 callback: (resp) => {
                     if (resp.error === undefined) {
-                        // Stille Anmeldung erfolgreich
                         updateUIVisibility(true);
                     } else {
-                        // Stille Anmeldung fehlgeschlagen, Nutzer muss manuell klicken
                         console.log('Stille Anmeldung fehlgeschlagen. Manuelle Anmeldung erforderlich.');
                     }
                 },
@@ -227,7 +254,6 @@
             tokenClient.requestAccessToken({ prompt: 'none' });
         }
     }
-
 
     function handleAuthClick() {
         const apiKey = apiKeyInput.value.trim();
@@ -237,7 +263,6 @@
             return;
         }
 
-        // Save keys to localStorage
         localStorage.setItem('vokabelAppApiKey', apiKey);
         localStorage.setItem('vokabelAppClientId', clientId);
 
@@ -258,7 +283,6 @@
     }
 
     function handleSignoutClick() {
-        // Clear keys from localStorage on signout
         localStorage.removeItem('vokabelAppApiKey');
         localStorage.removeItem('vokabelAppClientId');
         apiKeyInput.value = '';
@@ -289,11 +313,64 @@
         }
     }
 
-    cameraInput.addEventListener('change', (event) => addFilesToQueue(event.target.files));
+    cameraInput.addEventListener('change', handleCameraInput);
     uploadInput.addEventListener('change', (event) => addFilesToQueue(event.target.files));
     pasteButton.addEventListener('click', handlePaste);
     startProcessingButton.addEventListener('click', processQueue);
     clearQueueButton.addEventListener('click', clearQueue);
+    
+    // Modal button listeners
+    retakePhotoButton.addEventListener('click', () => cameraInput.click());
+    addToQueueButton.addEventListener('click', addCroppedImageToQueue);
+    cancelCropButton.addEventListener('click', closeCameraModal);
+
+
+    function handleCameraInput(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            cameraPreviewImage.src = e.target.result;
+            cameraModal.classList.remove('hidden');
+            
+            if (cropper) {
+                cropper.destroy();
+            }
+
+            cropper = new Cropper(cameraPreviewImage, {
+                aspectRatio: NaN, // Free crop
+                viewMode: 1,      // Prevent crop box from extending beyond the canvas
+                background: false,
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function addCroppedImageToQueue() {
+        if (!cropper) return;
+        cropper.getCroppedCanvas({
+            // Optional: for better quality on high-res screens
+            // width: 1024, 
+            // height: 1024,
+            imageSmoothingQuality: 'high',
+        }).toBlob((blob) => {
+            const file = new File([blob], `camera-photo-${Date.now()}.png`, { type: 'image/png' });
+            addFilesToQueue([file]);
+            closeCameraModal();
+        }, 'image/png');
+    }
+
+    function closeCameraModal() {
+        cameraModal.classList.add('hidden');
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        cameraPreviewImage.src = '';
+        // Reset the input value to allow taking the same picture again if needed
+        cameraInput.value = '';
+    }
 
     async function handlePaste() {
         try {
@@ -331,24 +408,42 @@
         updateQueuePreview();
     }
 
+    function removeFromQueue(indexToRemove) {
+        fileQueue.splice(indexToRemove, 1);
+        updateQueuePreview();
+    }
+
     async function updateQueuePreview() {
         previewsWrapper.innerHTML = '';
         previewContainer.classList.toggle('hidden', fileQueue.length === 0);
 
-        for (const item of fileQueue) {
+        fileQueue.forEach(async (item, index) => {
             if (item.file.type.startsWith('image/')) {
+                const previewWrapper = document.createElement('div');
+                previewWrapper.className = 'relative flex-shrink-0';
+                
                 const base64Data = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = e => resolve(e.target.result);
                     reader.readAsDataURL(item.file);
                 });
+                
                 const img = document.createElement('img');
                 img.src = base64Data;
                 img.alt = `Vorschau ${item.file.name}`;
                 img.className = "max-h-32 rounded-lg shadow-md";
-                previewsWrapper.appendChild(img);
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>';
+                deleteBtn.className = "absolute top-0 right-0 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold -translate-y-1/2 translate-x-1/2 shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50";
+                deleteBtn.setAttribute('aria-label', 'Aus der Warteschlange entfernen');
+                deleteBtn.onclick = () => removeFromQueue(index);
+                
+                previewWrapper.appendChild(img);
+                previewWrapper.appendChild(deleteBtn);
+                previewsWrapper.appendChild(previewWrapper);
             }
-        }
+        });
 
         if (fileQueue.length > 0) {
             updateStatus(`${fileQueue.length} Datei(en) zur Verarbeitung bereit.`);
@@ -392,7 +487,7 @@
         fileQueue = [];
         startProcessingButton.classList.add('hidden');
         clearQueueButton.classList.add('hidden');
-        customFilenameInput.value = ''; // Reset custom name after processing
+        customFilenameInput.value = ''; 
     }
     
     async function processFile(file, base64Data) {
@@ -443,7 +538,6 @@
         } catch (error) {
             console.error(error);
             updateStatus(`Fehler bei der Dateianalyse von ${file.name}: ${error.message}`, true, false);
-            // Warte kurz, damit der Benutzer die Fehlermeldung sehen kann, bevor es weitergeht.
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
@@ -494,7 +588,7 @@
     function getFormattedDate() {
         const today = new Date();
         const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind nullbasiert
+        const month = String(today.getMonth() + 1).padStart(2, '0');
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}.${month}.${day}`;
     }
@@ -508,7 +602,6 @@
             const langName = data.language === 'french' ? 'Französisch' : 'Englisch';
             const today = getFormattedDate();
 
-            // Vokabeln verarbeiten
             if (data.vocabulary && data.vocabulary.length > 0) {
                 const sheetName = customName ? customName : `${langPrefix} - Meine Vokabelliste - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
@@ -521,7 +614,6 @@
                 updateResultLink(sheetId, sheetName, "vocab");
             }
 
-            // Sätze verarbeiten
             if (data.sentences && data.sentences.length > 0) {
                 const sheetName = customName ? `${customName} - Beispielsätze` : `${langPrefix} - Meine Beispielsätze - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
