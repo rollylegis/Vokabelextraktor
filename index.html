@@ -29,9 +29,9 @@
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
     <div class="container mx-auto p-4 max-w-2xl w-full">
-        <div class="bg-white rounded-2xl shadow-lg p-6 smp-8">
+        <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
             <header class="text-center mb-6">
-                <h1 class="text-3xl smtext-4xl font-bold text-gray-900">Vokabelextraktor</h1>
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Vokabelextraktor</h1>
                 <p class="text-gray-600 mt-2">Sammle Vokabeln aus verschiedenen Quellen! Nutze deine Kamera, lade Dateien hoch oder füge Bilder aus der Zwischenablage hinzu. Gib optional einen Dateinamen an und starte die Verarbeitung, um alles direkt in Google Sheets zu speichern.</p>
                 <div class="mt-4 text-sm text-left">
                     <label class="font-semibold text-gray-700">Deine App-URL für die Google Console:</label>
@@ -201,8 +201,33 @@
     function maybeEnableButtons() {
         if (gapiInited && gisInited) {
             authorizeButton.disabled = false;
+            // Versuch der automatischen Anmeldung, wenn beide Bibliotheken geladen sind
+            trySilentSignIn();
         }
     }
+
+    function trySilentSignIn() {
+        const apiKey = apiKeyInput.value.trim();
+        const clientId = clientIdInput.value.trim();
+        if (apiKey && clientId) {
+            gapi.client.setApiKey(apiKey);
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: SCOPES,
+                callback: (resp) => {
+                    if (resp.error === undefined) {
+                        // Stille Anmeldung erfolgreich
+                        updateUIVisibility(true);
+                    } else {
+                        // Stille Anmeldung fehlgeschlagen, Nutzer muss manuell klicken
+                        console.log('Stille Anmeldung fehlgeschlagen. Manuelle Anmeldung erforderlich.');
+                    }
+                },
+            });
+            tokenClient.requestAccessToken({ prompt: 'none' });
+        }
+    }
+
 
     function handleAuthClick() {
         const apiKey = apiKeyInput.value.trim();
