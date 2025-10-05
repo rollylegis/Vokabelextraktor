@@ -471,6 +471,9 @@
         resultLinks.innerHTML = '';
         
         const sortedQueue = fileQueue.sort((a, b) => a.timestamp - b.timestamp);
+        let allVocabulary = [];
+        let allSentences = [];
+        let detectedLanguage = 'english'; // Default language
 
         for (let i = 0; i < sortedQueue.length; i++) {
             const item = sortedQueue[i];
@@ -484,12 +487,25 @@
                 reader.readAsDataURL(file);
             });
             
-            await processFile(file, base64Data);
+            const data = await processFile(file, base64Data);
+            if (data) {
+                if (i === 0) { // Set language from the first successfully processed file
+                    detectedLanguage = data.language;
+                }
+                allVocabulary.push(...data.vocabulary);
+                allSentences.push(...data.sentences);
+            }
         }
+
+        await uploadCombinedData({
+            language: detectedLanguage,
+            vocabulary: allVocabulary,
+            sentences: allSentences
+        });
+
         updateStatus(`Alle ${sortedQueue.length} Dateien erfolgreich verarbeitet!`, false, false);
         fileQueue = [];
-        startProcessingButton.classList.add('hidden');
-        clearQueueButton.classList.add('hidden');
+        updateQueuePreview(); // To hide buttons and clear preview
         customFilenameInput.value = ''; 
     }
     
@@ -536,12 +552,12 @@
                 if(candidate?.finishReason && candidate.finishReason !== 'STOP'){ errorMessage += ` Grund: ${candidate.finishReason}`; }
                 throw new Error(errorMessage);
             }
-            const data = JSON.parse(jsonText);
-            await uploadToSheets(data);
+            return JSON.parse(jsonText);
         } catch (error) {
             console.error(error);
             updateStatus(`Fehler bei der Dateianalyse von ${file.name}: ${error.message}`, true, false);
             await new Promise(resolve => setTimeout(resolve, 3000));
+            return null; // Return null on error to continue queue processing
         }
     }
 
@@ -591,12 +607,12 @@
     function getFormattedDate() {
         const today = new Date();
         const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind nullbasiert
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}.${month}.${day}`;
     }
 
-    async function uploadToSheets(data) {
+    async function uploadCombinedData(data) {
         try {
             const customName = customFilenameInput.value.trim();
             const folderPath = 'Vokabeln/SCAN aus APP';
@@ -605,6 +621,7 @@
             const langName = data.language === 'french' ? 'Französisch' : 'Englisch';
             const today = getFormattedDate();
 
+            // Vokabeln verarbeiten
             if (data.vocabulary && data.vocabulary.length > 0) {
                 const sheetName = customName ? customName : `${langPrefix} - Meine Vokabelliste - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
@@ -617,6 +634,7 @@
                 updateResultLink(sheetId, sheetName, "vocab");
             }
 
+            // Sätze verarbeiten
             if (data.sentences && data.sentences.length > 0) {
                 const sheetName = customName ? `${customName} - Beispielsätze` : `${langPrefix} - Meine Beispielsätze - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
@@ -629,12 +647,14 @@
                 updateResultLink(sheetId, sheetName, "sentence");
             }
             
-            resultsContainer.classList.remove('hidden');
+            if (data.vocabulary.length > 0 || data.sentences.length > 0) {
+                 resultsContainer.classList.remove('hidden');
+            }
 
         } catch (error) {
             console.error(error);
             const errorMessage = error.result ? error.result.error.message : error.message;
-            throw new Error(`Fehler beim Google Sheets Upload: ${errorMessage}`);
+            updateStatus(`Fehler beim Google Sheets Upload: ${errorMessage}`, true);
         }
     }
 
