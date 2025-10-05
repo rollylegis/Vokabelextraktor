@@ -636,7 +636,7 @@
 
             // Sätze verarbeiten
             if (data.sentences && data.sentences.length > 0) {
-                const sheetName = customName ? `${customName} - Beispielsätze` : `${langPrefix} - Meine Beispielsätze - ${today}`;
+                const sheetName = customName ? `${customName} - Sätze` : `${langPrefix} - Meine Sätze - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
                  if (!sheetId) {
                     sheetId = await createSheet(sheetName, targetFolderId);
