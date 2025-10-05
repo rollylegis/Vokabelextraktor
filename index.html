@@ -39,14 +39,7 @@
         <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
             <header class="text-center mb-6">
                 <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Vokabelextraktor</h1>
-                <p class="text-gray-600 mt-2">Sammle Vokabeln aus verschiedenen Quellen! Nutze deine Kamera, lade Dateien hoch oder füge Bilder aus der Zwischenablage hinzu. Gib optional einen Dateinamen an und starte die Verarbeitung, um alles direkt in Google Sheets zu speichern.</p>
-                <div class="mt-4 text-sm text-left">
-                    <label class="font-semibold text-gray-700">Deine App-URL für die Google Console:</label>
-                    <div class="flex items-center space-x-2 mt-1">
-                        <input type="text" id="url-display" class="w-full bg-gray-100 p-2 border border-gray-300 rounded-lg" readonly>
-                        <button id="copy-url-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg">Kopieren</button>
-                    </div>
-                </div>
+                <p class="text-gray-600 mt-2">Extrahiere Vokabeln aus Bildern oder PDFs und speichere sie direkt in Google Sheets.</p>
             </header>
 
             <div id="auth-container" class="text-center">
@@ -133,28 +126,6 @@
 
 <script type="text/javascript">
     window.onload = function() {
-        const urlDisplay = document.getElementById('url-display');
-        const copyBtn = document.getElementById('copy-url-btn');
-        const origin = window.location.origin;
-
-        if (origin && origin !== 'null') {
-            urlDisplay.value = origin;
-            copyBtn.onclick = function() {
-                try {
-                    urlDisplay.select();
-                    document.execCommand('copy');
-                    copyBtn.textContent = 'Kopiert!';
-                    setTimeout(() => { copyBtn.textContent = 'Kopieren'; }, 2000);
-                } catch (err) {
-                    console.error('Fehler beim Kopieren: ', err);
-                    copyBtn.textContent = 'Fehler!';
-                }
-            };
-        } else {
-            urlDisplay.value = 'Konnte die App-URL nicht automatisch erkennen.';
-            copyBtn.disabled = true;
-        }
-
         const savedApiKey = localStorage.getItem('vokabelAppApiKey');
         const savedClientId = localStorage.getItem('vokabelAppClientId');
         if (savedApiKey) {
@@ -621,7 +592,6 @@
             updateStatus('Suche/Erstelle Zielordner in Google Drive...', false, true);
             const targetFolderId = await getOrCreateFolderIdByPath(folderPath);
             const langPrefix = data.language === 'french' ? 'FR-DE' : 'ENG-DE';
-            const langName = data.language === 'french' ? 'Französisch' : 'Englisch';
             const today = getFormattedDate();
 
             // Vokabeln verarbeiten
