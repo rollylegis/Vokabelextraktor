@@ -534,6 +534,28 @@
         }
     }
 
+    async function getNextFileNumber(folderId) {
+        const response = await gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and trashed=false`,
+            fields: 'files(name)',
+            pageSize: 1000
+        });
+        const files = response.result.files;
+        let maxNumber = 0;
+        if (files && files.length > 0) {
+            for (const file of files) {
+                const match = file.name.match(/^(\d+)\s*-.*/);
+                if (match && match[1]) {
+                    const currentNumber = parseInt(match[1], 10);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            }
+        }
+        return maxNumber;
+    }
+
     async function findFolder(name, parentId) {
         const response = await gapi.client.drive.files.list({
             q: `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${name}' and '${parentId}' in parents`,
@@ -591,33 +613,46 @@
             const folderPath = 'Vokabeln/SCAN aus APP';
             updateStatus('Suche/Erstelle Zielordner in Google Drive...', false, true);
             const targetFolderId = await getOrCreateFolderIdByPath(folderPath);
+            
+            let vocabSheetName;
+            let sentencesSheetName;
+            
             const langPrefix = data.language === 'french' ? 'FR-DE' : 'ENG-DE';
             const today = getFormattedDate();
+
+            if (customName) {
+                updateStatus('Ermittle nächste Dateinummer...', false, true);
+                const nextNumber = await getNextFileNumber(targetFolderId) + 1;
+                const formattedNumber = String(nextNumber).padStart(2, '0');
+                vocabSheetName = `${formattedNumber} - ${customName}`;
+                sentencesSheetName = `${formattedNumber} - ${customName} - Sätze`;
+            } else {
+                vocabSheetName = `${langPrefix} - Meine Vokabelliste - ${today}`;
+                sentencesSheetName = `${langPrefix} - Meine Sätze - ${today}`;
+            }
 
             // Vokabeln verarbeiten
             if (data.vocabulary && data.vocabulary.length > 0) {
                 updateStatus('Lade Vokabeln hoch...', false, true);
-                const sheetName = customName ? customName : `${langPrefix} - Meine Vokabelliste - ${today}`;
-                let sheetId = await findSheet(sheetName, targetFolderId);
+                let sheetId = await findSheet(vocabSheetName, targetFolderId);
                 if (!sheetId) {
-                    sheetId = await createSheet(sheetName, targetFolderId);
+                    sheetId = await createSheet(vocabSheetName, targetFolderId);
                 }
                 const values = data.vocabulary.map(v => [v.source, v.german]);
                 await appendData(sheetId, values);
-                updateResultLink(sheetId, sheetName, "vocab");
+                updateResultLink(sheetId, vocabSheetName, "vocab");
             }
 
             // Sätze verarbeiten
             if (data.sentences && data.sentences.length > 0) {
                 updateStatus('Lade Sätze hoch...', false, true);
-                const sheetName = customName ? `${customName} - Sätze` : `${langPrefix} - Meine Sätze - ${today}`;
-                let sheetId = await findSheet(sheetName, targetFolderId);
+                let sheetId = await findSheet(sentencesSheetName, targetFolderId);
                  if (!sheetId) {
-                    sheetId = await createSheet(sheetName, targetFolderId);
+                    sheetId = await createSheet(sentencesSheetName, targetFolderId);
                 }
                 const values = data.sentences.map(s => [s.source, s.german]);
                 await appendData(sheetId, values);
-                updateResultLink(sheetId, sheetName, "sentence");
+                updateResultLink(sheetId, sentencesSheetName, "sentence");
             }
             
             if (data.vocabulary.length > 0 || data.sentences.length > 0) {
