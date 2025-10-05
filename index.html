@@ -90,9 +90,9 @@
                     <div id="previews-wrapper" class="flex flex-wrap gap-4 justify-center p-4 bg-gray-50 rounded-lg"></div>
                 </div>
 
-                <div id="status-container" class="text-center p-4 bg-gray-50 rounded-lg min-h-[80px] flex items-center justify-center">
+                <div id="status-container" class="text-center p-4 bg-gray-50 rounded-lg min-h-[100px] flex flex-col items-center justify-center">
+                    <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 hidden mb-2"></div>
                     <p id="status-text" class="text-gray-500">Bitte wähle eine oder mehrere Dateien aus.</p>
-                    <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 hidden"></div>
                 </div>
 
                 <div id="results-container" class="mt-6 text-center hidden">
@@ -686,11 +686,10 @@
 
     function updateStatus(message, isError = false, showLoaderState = false) {
         statusText.textContent = message;
-        statusText.className = isError ? 'text-red-600' : 'text-gray-600';
+        statusText.className = isError ? 'text-red-600 font-semibold' : 'text-gray-600';
         loader.classList.toggle('hidden', !showLoaderState);
-        statusText.classList.toggle('hidden', showLoaderState);
+        statusText.classList.remove('hidden');
     }
 </script>
 </body>
 </html>
-
