@@ -29,9 +29,9 @@
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
     <div class="container mx-auto p-4 max-w-2xl w-full">
-        <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+        <div class="bg-white rounded-2xl shadow-lg p-6 smp-8">
             <header class="text-center mb-6">
-                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Vokabelextraktor</h1>
+                <h1 class="text-3xl smtext-4xl font-bold text-gray-900">Vokabelextraktor</h1>
                 <p class="text-gray-600 mt-2">Sammle Vokabeln aus verschiedenen Quellen! Nutze deine Kamera, lade Dateien hoch oder füge Bilder aus der Zwischenablage hinzu. Gib optional einen Dateinamen an und starte die Verarbeitung, um alles direkt in Google Sheets zu speichern.</p>
                 <div class="mt-4 text-sm text-left">
                     <label class="font-semibold text-gray-700">Deine App-URL für die Google Console:</label>
@@ -131,6 +131,16 @@
             urlDisplay.value = 'Konnte die App-URL nicht automatisch erkennen.';
             copyBtn.disabled = true;
         }
+
+        // Load keys from localStorage
+        const savedApiKey = localStorage.getItem('vokabelAppApiKey');
+        const savedClientId = localStorage.getItem('vokabelAppClientId');
+        if (savedApiKey) {
+            apiKeyInput.value = savedApiKey;
+        }
+        if (savedClientId) {
+            clientIdInput.value = savedClientId;
+        }
     };
 
     const authorizeButton = document.getElementById('authorize_button');
@@ -201,6 +211,11 @@
             updateStatus('Bitte gib zuerst deinen API Key und deine Client ID ein.', true);
             return;
         }
+
+        // Save keys to localStorage
+        localStorage.setItem('vokabelAppApiKey', apiKey);
+        localStorage.setItem('vokabelAppClientId', clientId);
+
         gapi.client.setApiKey(apiKey);
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: clientId,
@@ -218,6 +233,12 @@
     }
 
     function handleSignoutClick() {
+        // Clear keys from localStorage on signout
+        localStorage.removeItem('vokabelAppApiKey');
+        localStorage.removeItem('vokabelAppClientId');
+        apiKeyInput.value = '';
+        clientIdInput.value = '';
+
         const token = gapi.client.getToken();
         if (token !== null) {
             google.accounts.oauth2.revoke(token.access_token);
