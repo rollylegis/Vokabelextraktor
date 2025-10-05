@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vokabelextraktor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border-top-color: #3498db;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+    <div class="container mx-auto p-4 max-w-2xl w-full">
+        <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+            <header class="text-center mb-6">
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Vokabelextraktor</h1>
+                <p class="text-gray-600 mt-2">Sammle Vokabeln aus verschiedenen Quellen! Nutze deine Kamera, lade Dateien hoch oder füge Bilder aus der Zwischenablage hinzu. Gib optional einen Dateinamen an und starte die Verarbeitung, um alles direkt in Google Sheets zu speichern.</p>
+                <div class="mt-4 text-sm text-left">
+                    <label class="font-semibold text-gray-700">Deine App-URL für die Google Console:</label>
+                    <div class="flex items-center space-x-2 mt-1">
+                        <input type="text" id="url-display" class="w-full bg-gray-100 p-2 border border-gray-300 rounded-lg" readonly>
+                        <button id="copy-url-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg">Kopieren</button>
+                    </div>
+                </div>
+            </header>
+
+            <div id="auth-container" class="text-center">
+                <input type="text" id="api-key-input" placeholder="Dein Google API Key" class="w-full p-3 border border-gray-300 rounded-lg mb-2 text-center" value="">
+                <input type="text" id="client-id-input" placeholder="Deine Google Client ID" class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-center" value="">
+                <button id="authorize_button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Mit Google anmelden</button>
+                <button id="signout_button" class="hidden bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg w-full mt-2 transition duration-300">Abmelden</button>
+            </div>
+
+            <main id="app-container" class="hidden">
+                <div class="mb-4">
+                    <label for="custom-filename-input" class="block text-sm font-medium text-gray-700 mb-1">Benutzerdefinierter Dateiname (optional):</label>
+                    <input type="text" id="custom-filename-input" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="z.B. Lektion 5 - Unregelmäßige Verben">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <label for="camera-input" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+                        <span>Kamera</span>
+                    </label>
+                    <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
+                    
+                    <label for="upload-input" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <span>Dateien hochladen</span>
+                    </label>
+                    <input type="file" id="upload-input" accept="image/*,application/pdf" class="hidden" multiple>
+                    
+                    <button id="paste-button" class="cursor-pointer bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <span>Zwischenablage</span>
+                    </button>
+                </div>
+                
+                <div id="action-buttons" class="flex justify-center gap-4 mb-6">
+                    <button id="start-processing-button" class="hidden cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <span>Verarbeitung starten</span>
+                    </button>
+                    <button id="clear-queue-button" class="hidden cursor-pointer bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                        <span>Warteschlange leeren</span>
+                    </button>
+                </div>
+
+                <div id="preview-container" class="mb-6 text-center hidden">
+                     <h2 class="text-xl font-semibold mb-3">Vorschau der Warteschlange</h2>
+                    <div id="previews-wrapper" class="flex flex-wrap gap-4 justify-center p-4 bg-gray-50 rounded-lg"></div>
+                </div>
+
+                <div id="status-container" class="text-center p-4 bg-gray-50 rounded-lg min-h-[80px] flex items-center justify-center">
+                    <p id="status-text" class="text-gray-500">Bitte wähle eine oder mehrere Dateien aus.</p>
+                    <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 hidden"></div>
+                </div>
+
+                <div id="results-container" class="mt-6 text-center hidden">
+                    <h2 class="text-xl font-semibold mb-3">Ergebnisse</h2>
+                    <div id="result-links" class="space-y-3">
+                       <!-- Links werden hier dynamisch eingefügt -->
+                    </div>
+                </div>
+            </main>
+        </div>
+        <footer class="text-center mt-4 text-sm text-gray-500">
+            <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
+        </footer>
+    </div>
+
+<script type="text/javascript">
+    window.onload = function() {
+        const urlDisplay = document.getElementById('url-display');
+        const copyBtn = document.getElementById('copy-url-btn');
+        const origin = window.location.origin;
+
+        if (origin && origin !== 'null') {
+            urlDisplay.value = origin;
+            copyBtn.onclick = function() {
+                try {
+                    urlDisplay.select();
+                    document.execCommand('copy');
+                    copyBtn.textContent = 'Kopiert!';
+                    setTimeout(() => { copyBtn.textContent = 'Kopieren'; }, 2000);
+                } catch (err) {
+                    console.error('Fehler beim Kopieren: ', err);
+                    copyBtn.textContent = 'Fehler!';
+                }
+            };
+        } else {
+            urlDisplay.value = 'Konnte die App-URL nicht automatisch erkennen.';
+            copyBtn.disabled = true;
+        }
+    };
+
+    const authorizeButton = document.getElementById('authorize_button');
+    const signoutButton = document.getElementById('signout_button');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const clientIdInput = document.getElementById('client-id-input');
+    const authContainer = document.getElementById('auth-container');
+    const appContainer = document.getElementById('app-container');
+    const cameraInput = document.getElementById('camera-input');
+    const uploadInput = document.getElementById('upload-input');
+    const pasteButton = document.getElementById('paste-button');
+    const startProcessingButton = document.getElementById('start-processing-button');
+    const clearQueueButton = document.getElementById('clear-queue-button');
+    const customFilenameInput = document.getElementById('custom-filename-input');
+    const previewContainer = document.getElementById('preview-container');
+    const previewsWrapper = document.getElementById('previews-wrapper');
+    const statusContainer = document.getElementById('status-container');
+    const statusText = document.getElementById('status-text');
+    const loader = document.getElementById('loader');
+    const resultsContainer = document.getElementById('results-container');
+    const resultLinks = document.getElementById('result-links');
+    
+    let gapiInited = false;
+    let gisInited = false;
+    let tokenClient;
+    let fileQueue = [];
+    
+    const SCOPES = 'https://www.googleapis.com/auth/drive';
+
+    authorizeButton.onclick = handleAuthClick;
+    signoutButton.onclick = handleSignoutClick;
+
+    gapi.load('client', initializeGapiClient);
+    
+    const gsiScript = document.createElement('script');
+    gsiScript.src = 'https://accounts.google.com/gsi/client';
+    gsiScript.async = true;
+    gsiScript.defer = true;
+    gsiScript.onload = initializeGisClient;
+    document.body.appendChild(gsiScript);
+
+    async function initializeGapiClient() {
+        await gapi.client.init({
+            discoveryDocs: [
+                'https://sheets.googleapis.com/$discovery/rest?version=v4',
+                'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
+            ],
+        });
+        gapiInited = true;
+        maybeEnableButtons();
+    }
+
+    function initializeGisClient() {
+        gisInited = true;
+        maybeEnableButtons();
+    }
+
+    function maybeEnableButtons() {
+        if (gapiInited && gisInited) {
+            authorizeButton.disabled = false;
+        }
+    }
+
+    function handleAuthClick() {
+        const apiKey = apiKeyInput.value.trim();
+        const clientId = clientIdInput.value.trim();
+        if (!apiKey || !clientId) {
+            updateStatus('Bitte gib zuerst deinen API Key und deine Client ID ein.', true);
+            return;
+        }
+        gapi.client.setApiKey(apiKey);
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: SCOPES,
+            callback: (resp) => { 
+                if (resp.error !== undefined) {
+                    console.error('Authentication error:', resp);
+                    updateStatus(`Anmeldefehler: ${resp.error_description || resp.error}`, true);
+                    return;
+                }
+                updateUIVisibility(true);
+            },
+        });
+        tokenClient.requestAccessToken({prompt: 'select_account'});
+    }
+
+    function handleSignoutClick() {
+        const token = gapi.client.getToken();
+        if (token !== null) {
+            google.accounts.oauth2.revoke(token.access_token);
+            gapi.client.setToken('');
+            updateUIVisibility(false);
+        }
+    }
+
+    function updateUIVisibility(isSignedIn) {
+        if (isSignedIn) {
+            authContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            signoutButton.classList.remove('hidden');
+            authorizeButton.classList.add('hidden');
+            updateStatus('Anmeldung erfolgreich! Du kannst jetzt Dateien hochladen.');
+        } else {
+            authContainer.classList.remove('hidden');
+            appContainer.classList.add('hidden');
+            signoutButton.classList.add('hidden');
+            authorizeButton.classList.remove('hidden');
+            updateStatus('Du wurdest abgemeldet.');
+            resultsContainer.classList.add('hidden');
+        }
+    }
+
+    cameraInput.addEventListener('change', (event) => addFilesToQueue(event.target.files));
+    uploadInput.addEventListener('change', (event) => addFilesToQueue(event.target.files));
+    pasteButton.addEventListener('click', handlePaste);
+    startProcessingButton.addEventListener('click', processQueue);
+    clearQueueButton.addEventListener('click', clearQueue);
+
+    async function handlePaste() {
+        try {
+            if (!navigator.clipboard?.read) {
+                 updateStatus('Dein Browser unterstützt das Einfügen aus der Zwischenablage nicht.', true);
+                 return;
+            }
+            const clipboardItems = await navigator.clipboard.read();
+            let imageBlob = null;
+            for (const item of clipboardItems) {
+                const imageType = item.types.find(type => type.startsWith('image/'));
+                if (imageType) {
+                    imageBlob = await item.getType(imageType);
+                    break;
+                }
+            }
+            if (imageBlob) {
+                const file = new File([imageBlob], "clipboard-image.png", { type: imageBlob.type });
+                addFilesToQueue([file]);
+            } else {
+                updateStatus('Kein Bild in der Zwischenablage gefunden.', true);
+            }
+        } catch (error) {
+            console.error('Fehler beim Einfügen:', error);
+            updateStatus(`Fehler beim Zugriff auf die Zwischenablage: ${error.message}`, true);
+        }
+    }
+
+    function addFilesToQueue(fileList) {
+        if (!fileList || fileList.length === 0) return;
+        const files = Array.from(fileList);
+        for (const file of files) {
+            fileQueue.push({ file: file, timestamp: new Date() });
+        }
+        updateQueuePreview();
+    }
+
+    async function updateQueuePreview() {
+        previewsWrapper.innerHTML = '';
+        previewContainer.classList.toggle('hidden', fileQueue.length === 0);
+
+        for (const item of fileQueue) {
+            if (item.file.type.startsWith('image/')) {
+                const base64Data = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.readAsDataURL(item.file);
+                });
+                const img = document.createElement('img');
+                img.src = base64Data;
+                img.alt = `Vorschau ${item.file.name}`;
+                img.className = "max-h-32 rounded-lg shadow-md";
+                previewsWrapper.appendChild(img);
+            }
+        }
+
+        if (fileQueue.length > 0) {
+            updateStatus(`${fileQueue.length} Datei(en) zur Verarbeitung bereit.`);
+            startProcessingButton.classList.remove('hidden');
+            clearQueueButton.classList.remove('hidden');
+        } else {
+            updateStatus('Bitte wähle eine oder mehrere Dateien aus.');
+            startProcessingButton.classList.add('hidden');
+            clearQueueButton.classList.add('hidden');
+        }
+    }
+    
+    function clearQueue() {
+        fileQueue = [];
+        updateQueuePreview();
+    }
+
+    async function processQueue() {
+        if (fileQueue.length === 0) return;
+        
+        resultsContainer.classList.add('hidden');
+        resultLinks.innerHTML = '';
+        
+        const sortedQueue = fileQueue.sort((a, b) => a.timestamp - b.timestamp);
+
+        for (let i = 0; i < sortedQueue.length; i++) {
+            const item = sortedQueue[i];
+            const file = item.file;
+            updateStatus(`Verarbeite Datei ${i + 1} von ${sortedQueue.length}: ${file.name}`, false, true);
+            
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = err => reject(err);
+                reader.readAsDataURL(file);
+            });
+            
+            await processFile(file, base64Data);
+        }
+        updateStatus(`Alle ${sortedQueue.length} Dateien erfolgreich verarbeitet!`, false, false);
+        fileQueue = [];
+        startProcessingButton.classList.add('hidden');
+        clearQueueButton.classList.add('hidden');
+        customFilenameInput.value = ''; // Reset custom name after processing
+    }
+    
+    async function processFile(file, base64Data) {
+        const pureBase64 = base64Data.split(',')[1];
+        const systemPrompt = `Du bist ein Assistent zur Vokabelextraktion. Deine Aufgabe ist es, aus einer Datei (Bild oder PDF) Vokabeln und Beispielsätze zu extrahieren.
+1.  Identifiziere ZUERST die Ausgangssprache des Textes. Es kann nur 'english' oder 'french' sein.
+2.  Extrahiere die Vokabeln und ihre deutsche Übersetzung.
+3.  Extrahiere die Beispielsätze UND ÜBERSETZE JEDEN SATZ INS DEUTSCHE.
+4.  Gib das Ergebnis IMMER im JSON-Format zurück, das dem angegebenen Schema entspricht. Das 'source'-Feld enthält den Originaltext, das 'german'-Feld die deutsche Übersetzung. Wenn nichts gefunden wird, gib leere Listen und 'english' als Standardsprache zurück.`;
+        
+        const userQuery = "Extrahiere die Sprache, Vokabeln und Beispielsätze aus der folgenden Datei.";
+        
+        const payload = {
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: [ { text: userQuery }, { inlineData: { mimeType: file.type, data: pureBase64 } } ] }],
+            generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                        "language": { "type": "STRING", "enum": ["english", "french"] },
+                        "vocabulary": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } },
+                        "sentences": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } }
+                    }
+                }
+            }
+        };
+
+        const GEMINI_API_KEY = apiKeyInput.value.trim();
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+        
+        try {
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API-Fehler: ${errorData.error.message}`);
+            }
+            const result = await response.json();
+            const candidate = result?.candidates?.[0];
+            const jsonText = candidate?.content?.parts?.[0]?.text;
+            if (!jsonText) {
+                let errorMessage = "Konnte keine strukturierte Antwort von der KI erhalten.";
+                if(candidate?.finishReason && candidate.finishReason !== 'STOP'){ errorMessage += ` Grund: ${candidate.finishReason}`; }
+                throw new Error(errorMessage);
+            }
+            const data = JSON.parse(jsonText);
+            await uploadToSheets(data);
+        } catch (error) {
+            console.error(error);
+            updateStatus(`Fehler bei der Dateianalyse von ${file.name}: ${error.message}`, true, false);
+            // Warte kurz, damit der Benutzer die Fehlermeldung sehen kann, bevor es weitergeht.
+            await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+    }
+
+    async function findFolder(name, parentId) {
+        const response = await gapi.client.drive.files.list({
+            q: `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${name}' and '${parentId}' in parents`,
+            fields: 'files(id, name)',
+        });
+        const files = response.result.files;
+        return (files && files.length > 0) ? files[0].id : null;
+    }
+
+    async function createFolder(name, parentId) {
+        const fileMetadata = { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] };
+        const response = await gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' });
+        return response.result.id;
+    }
+
+    async function getOrCreateFolderIdByPath(path) {
+        const folderNames = path.split('/').filter(name => name.length > 0);
+        let parentId = 'root';
+        for (const name of folderNames) {
+            let folderId = await findFolder(name, parentId);
+            if (!folderId) {
+                folderId = await createFolder(name, parentId);
+            }
+            parentId = folderId;
+        }
+        return parentId;
+    }
+
+    async function findSheet(name, parentId) {
+        const response = await gapi.client.drive.files.list({
+            q: `mimeType='application/vnd.google-apps.spreadsheet' and trashed=false and name='${name}' and '${parentId}' in parents`,
+            fields: 'files(id, name)',
+        });
+        const files = response.result.files;
+        return (files && files.length > 0) ? files[0].id : null;
+    }
+
+    async function createSheet(title, parentFolderId) {
+        const fileMetadata = { name: title, parents: [parentFolderId], mimeType: 'application/vnd.google-apps.spreadsheet' };
+        const response = await gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' });
+        return response.result.id;
+    }
+
+    function getFormattedDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind nullbasiert
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}.${month}.${day}`;
+    }
+
+    async function uploadToSheets(data) {
+        try {
+            const customName = customFilenameInput.value.trim();
+            const folderPath = 'Vokabeln/SCAN aus APP';
+            const targetFolderId = await getOrCreateFolderIdByPath(folderPath);
+            const langPrefix = data.language === 'french' ? 'FR-DE' : 'ENG-DE';
+            const langName = data.language === 'french' ? 'Französisch' : 'Englisch';
+            const today = getFormattedDate();
+
+            // Vokabeln verarbeiten
+            if (data.vocabulary && data.vocabulary.length > 0) {
+                const sheetName = customName ? customName : `${langPrefix} - Meine Vokabelliste - ${today}`;
+                let sheetId = await findSheet(sheetName, targetFolderId);
+                if (!sheetId) {
+                    sheetId = await createSheet(sheetName, targetFolderId);
+                    await appendData(sheetId, [[langName, "Deutsch"]]); 
+                }
+                const values = data.vocabulary.map(v => [v.source, v.german]);
+                await appendData(sheetId, values);
+                updateResultLink(sheetId, sheetName, "vocab");
+            }
+
+            // Sätze verarbeiten
+            if (data.sentences && data.sentences.length > 0) {
+                const sheetName = customName ? `${customName} - Beispielsätze` : `${langPrefix} - Meine Beispielsätze - ${today}`;
+                let sheetId = await findSheet(sheetName, targetFolderId);
+                 if (!sheetId) {
+                    sheetId = await createSheet(sheetName, targetFolderId);
+                    await appendData(sheetId, [[langName, "Deutsch"]]);
+                }
+                const values = data.sentences.map(s => [s.source, s.german]);
+                await appendData(sheetId, values);
+                updateResultLink(sheetId, sheetName, "sentence");
+            }
+            
+            resultsContainer.classList.remove('hidden');
+
+        } catch (error) {
+            console.error(error);
+            const errorMessage = error.result ? error.result.error.message : error.message;
+            throw new Error(`Fehler beim Google Sheets Upload: ${errorMessage}`);
+        }
+    }
+
+    function updateResultLink(sheetId, sheetName, type) {
+        const linkId = `${type}-link-${sheetId}`;
+        let link = document.getElementById(linkId);
+        if (!link) {
+            link = document.createElement('a');
+            link.id = linkId;
+            link.target = "_blank";
+            link.className = "block bg-green-100 text-green-800 p-3 rounded-lg hover:bg-green-200 transition duration-300";
+            resultLinks.appendChild(link);
+        }
+        link.href = `https://docs.google.com/spreadsheets/d/${sheetId}/`;
+        link.textContent = `${sheetName} öffnen`;
+    }
+
+    async function appendData(spreadsheetId, values) {
+        await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: spreadsheetId, range: 'A1', valueInputOption: 'USER_ENTERED', resource: { values: values } });
+    }
+
+    function updateStatus(message, isError = false, showLoaderState = false) {
+        statusText.textContent = message;
+        statusText.className = isError ? 'text-red-600' : 'text-gray-600';
+        loader.classList.toggle('hidden', !showLoaderState);
+        statusText.classList.toggle('hidden', showLoaderState);
+    }
+</script>
+</body>
+</html>
+
