@@ -478,7 +478,7 @@
         for (let i = 0; i < sortedQueue.length; i++) {
             const item = sortedQueue[i];
             const file = item.file;
-            updateStatus(`Verarbeite Datei ${i + 1} von ${sortedQueue.length}: ${file.name}`, false, true);
+            updateStatus(`[${i + 1}/${sortedQueue.length}] Analysiere: ${file.name}`, false, true);
             
             const base64Data = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -496,6 +496,8 @@
                 allSentences.push(...data.sentences);
             }
         }
+        
+        updateStatus('Alle Dateien analysiert. Starte Upload zu Google Drive...', false, true);
 
         await uploadCombinedData({
             language: detectedLanguage,
@@ -616,6 +618,7 @@
         try {
             const customName = customFilenameInput.value.trim();
             const folderPath = 'Vokabeln/SCAN aus APP';
+            updateStatus('Suche/Erstelle Zielordner in Google Drive...', false, true);
             const targetFolderId = await getOrCreateFolderIdByPath(folderPath);
             const langPrefix = data.language === 'french' ? 'FR-DE' : 'ENG-DE';
             const langName = data.language === 'french' ? 'Französisch' : 'Englisch';
@@ -623,6 +626,7 @@
 
             // Vokabeln verarbeiten
             if (data.vocabulary && data.vocabulary.length > 0) {
+                updateStatus('Lade Vokabeln hoch...', false, true);
                 const sheetName = customName ? customName : `${langPrefix} - Meine Vokabelliste - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
                 if (!sheetId) {
@@ -636,6 +640,7 @@
 
             // Sätze verarbeiten
             if (data.sentences && data.sentences.length > 0) {
+                updateStatus('Lade Sätze hoch...', false, true);
                 const sheetName = customName ? `${customName} - Sätze` : `${langPrefix} - Meine Sätze - ${today}`;
                 let sheetId = await findSheet(sheetName, targetFolderId);
                  if (!sheetId) {
