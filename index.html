@@ -124,8 +124,8 @@
             </div>
             <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
                 <button id="retake-photo-button" class="w-full sm:w-auto cursor-pointer bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Neu aufnehmen</button>
-                <button id="add-to-queue-button" class="w-full sm:w-auto cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Zur Warteschlange</button>
-                <button id="cancel-crop-button" class="w-full sm:w-auto cursor-pointer bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Abbrechen</button>
+                <button id="add-selection-to-queue-button" class="w-full sm:w-auto cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Auswahl zur Warteschlange</button>
+                <button id="finish-selection-button" class="w-full sm:w-auto cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-center transition duration-300">Auswahl abgeschlossen</button>
             </div>
         </div>
     </div>
@@ -189,8 +189,8 @@
     const cameraModal = document.getElementById('camera-modal');
     const cameraPreviewImage = document.getElementById('camera-preview-image');
     const retakePhotoButton = document.getElementById('retake-photo-button');
-    const addToQueueButton = document.getElementById('add-to-queue-button');
-    const cancelCropButton = document.getElementById('cancel-crop-button');
+    const addSelectionToQueueButton = document.getElementById('add-selection-to-queue-button');
+    const finishSelectionButton = document.getElementById('finish-selection-button');
 
     let gapiInited = false;
     let gisInited = false;
@@ -321,8 +321,8 @@
     
     // Modal button listeners
     retakePhotoButton.addEventListener('click', () => cameraInput.click());
-    addToQueueButton.addEventListener('click', addCroppedImageToQueue);
-    cancelCropButton.addEventListener('click', closeCameraModal);
+    addSelectionToQueueButton.addEventListener('click', addSelectionToQueue);
+    finishSelectionButton.addEventListener('click', closeCameraModal);
 
 
     function handleCameraInput(event) {
@@ -347,17 +347,21 @@
         reader.readAsDataURL(file);
     }
 
-    function addCroppedImageToQueue() {
+    function addSelectionToQueue() {
         if (!cropper) return;
         cropper.getCroppedCanvas({
-            // Optional: for better quality on high-res screens
-            // width: 1024, 
-            // height: 1024,
             imageSmoothingQuality: 'high',
         }).toBlob((blob) => {
-            const file = new File([blob], `camera-photo-${Date.now()}.png`, { type: 'image/png' });
+            const file = new File([blob], `camera-selection-${Date.now()}.png`, { type: 'image/png' });
             addFilesToQueue([file]);
-            closeCameraModal();
+            // Give user feedback
+            const originalButtonText = addSelectionToQueueButton.innerHTML;
+            addSelectionToQueueButton.innerHTML = '<span>Hinzugefügt!</span>';
+            addSelectionToQueueButton.classList.add('bg-green-500', 'hover:bg-green-600');
+            setTimeout(() => {
+                addSelectionToQueueButton.innerHTML = originalButtonText;
+                addSelectionToQueueButton.classList.remove('bg-green-500', 'hover:bg-green-600');
+            }, 1000);
         }, 'image/png');
     }
 
@@ -368,7 +372,6 @@
             cropper = null;
         }
         cameraPreviewImage.src = '';
-        // Reset the input value to allow taking the same picture again if needed
         cameraInput.value = '';
     }
 
