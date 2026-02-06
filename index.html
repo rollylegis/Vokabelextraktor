@@ -28,7 +28,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        /* Stellt sicher, dass das Cropper-Bild nicht zu groß wird */
         #camera-preview-image-container > img {
             max-width: 100%;
         }
@@ -97,15 +96,13 @@
 
                 <div id="results-container" class="mt-6 text-center hidden">
                     <h2 class="text-xl font-semibold mb-3">Ergebnisse</h2>
-                    <div id="result-links" class="space-y-3">
-                       <!-- Links werden hier dynamisch eingefügt -->
-                    </div>
+                    <div id="result-links" class="space-y-3"></div>
                 </div>
             </main>
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2026 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:05 (Auto-Latest)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:30 (Gemini 3.0 Flash Preview)</p>
         </footer>
     </div>
     
@@ -377,17 +374,14 @@
                 reader.onload = e => r(e.target.result.split(',')[1]);
                 reader.readAsDataURL(file);
             });
-            
-            // Verwende die neue Fallback-Funktion mit Priorität auf "Latest"
-            const data = await processFileWithFallback(file.type, base64);
-            
+            const data = await processFile(file.type, base64);
             if (data) {
                 if (i === 0) detectedLang = data.language;
                 if (data.vocabulary) allVocab.push(...data.vocabulary);
                 if (data.sentences) allSentences.push(...data.sentences);
             }
         }
-
+        
         if (allVocab.length === 0 && allSentences.length === 0) {
              updateStatus('Keine Daten extrahiert. Überprüfe API-Key/Quota.', true, false);
              return;
@@ -398,33 +392,8 @@
         updateStatus(`Fertig! ${allVocab.length} Vokabeln & ${allSentences.length} Sätze.`, false, false);
         fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
-
-    // NEU: Diese Funktion probiert mehrere Modelle durch, "Latest" ist Prio 1
-    async function processFileWithFallback(mimeType, base64) {
-        // Liste der Modelle, die wir probieren wollen - Latest als erstes!
-        const modelsToTry = [
-            'gemini-1.5-flash-latest', // Die empfohlene "Zukunftssichere" Variante
-            'gemini-1.5-flash',       // Der stabile Standard
-            'gemini-1.5-flash-002'    // Spezifischer Checkpoint
-        ];
-
-        for (const modelName of modelsToTry) {
-            console.log(`Versuche Modell: ${modelName}...`);
-            const data = await processFile(mimeType, base64, modelName);
-            if (data) {
-                console.log(`Erfolg mit Modell: ${modelName}`);
-                return data; // Erfolg! Wir brechen die Schleife ab und geben die Daten zurück
-            }
-            // Wenn nicht erfolgreich, warten wir kurz und probieren das nächste Modell
-            await new Promise(r => setTimeout(r, 500));
-        }
-        
-        // Wenn wir hier ankommen, haben alle Modelle versagt
-        console.error("Alle Modelle fehlgeschlagen.");
-        return null;
-    }
     
-    async function processFile(mimeType, base64, modelName) {
+    async function processFile(mimeType, base64) {
         const payload = {
             contents: [{ parts: [
                 { text: "Extrahiere Sprache (english/french), Vokabeln (source/german) und Beispielsätze (source/german) als JSON." },
@@ -439,24 +408,22 @@
                 }}
             }
         };
-        
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKeyInput.value.trim()}`;
-        
+        // HIER: KNALLHARTES GEMINI 3 FLASH PREVIEW
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKeyInput.value.trim()}`;
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
             if (!resp.ok) {
                  const errData = await resp.json().catch(() => ({}));
-                 // Wir werfen keinen harten Fehler, damit die Schleife weiterlaufen kann, loggen es aber
-                 console.warn(`Modell ${modelName} fehlgeschlagen:`, errData);
-                 return null;
+                 throw new Error(errData.error?.message || resp.statusText);
             }
             const result = await resp.json();
-            if (!result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                return null;
-            }
+            if (!result.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Keine Textantwort von KI");
             return JSON.parse(result.candidates[0].content.parts[0].text);
         } catch (e) { 
-            console.warn(`Fehler bei Modell ${modelName}:`, e);
+            console.error(e); 
+            updateStatus(`Fehler: ${e.message}`, true, false);
+            // Längere Pause bei Fehler, damit User es lesen kann
+            await new Promise(r => setTimeout(r, 5000));
             return null; 
         }
     }
