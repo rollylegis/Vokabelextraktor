@@ -62,7 +62,7 @@
                     <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
                     
                     <label for="upload-input" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" cy="3" x2="12" y2="15"></line></svg>
+                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                         <span>Dateien hochladen</span>
                     </label>
                     <input type="file" id="upload-input" accept="image/*,application/pdf" class="hidden" multiple>
@@ -102,7 +102,7 @@
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 26.11.25 22:00 (Robustes Fehlerhandling)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 15:43 (Stable 1.5 Flash + Excel)</p>
         </footer>
     </div>
     
@@ -373,24 +373,16 @@
                 reader.onload = e => r(e.target.result.split(',')[1]);
                 reader.readAsDataURL(file);
             });
-            
             const data = await processFile(file.type, base64);
-            
             if (data) {
                 if (i === 0) detectedLang = data.language;
-                if (data.vocabulary) allVocab.push(...data.vocabulary);
-                if (data.sentences) allSentences.push(...data.sentences);
+                allVocab.push(...data.vocabulary);
+                allSentences.push(...data.sentences);
             }
         }
-
-        if (allVocab.length === 0 && allSentences.length === 0) {
-             updateStatus('Keine Daten extrahiert. Überprüfe API-Key/Quota.', true, false);
-             return;
-        }
-
         updateStatus('Upload zu Google Drive...', false, true);
         await uploadCombinedData({ language: detectedLang, vocabulary: allVocab, sentences: allSentences });
-        updateStatus(`Fertig! ${allVocab.length} Vokabeln & ${allSentences.length} Sätze.`, false, false);
+        updateStatus('Fertig!', false, false);
         fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
     
@@ -409,7 +401,8 @@
                 }}
             }
         };
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKeyInput.value.trim()}`;
+        // HIER WIRD AUF DIE STANDARD-FLASH VERSION 1.5 GESETZT (Hohe Limits)
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKeyInput.value.trim()}`;
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
             if (!resp.ok) {
