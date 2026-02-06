@@ -28,6 +28,7 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Stellt sicher, dass das Cropper-Bild nicht zu groß wird */
         #camera-preview-image-container > img {
             max-width: 100%;
         }
@@ -96,13 +97,15 @@
 
                 <div id="results-container" class="mt-6 text-center hidden">
                     <h2 class="text-xl font-semibold mb-3">Ergebnisse</h2>
-                    <div id="result-links" class="space-y-3"></div>
+                    <div id="result-links" class="space-y-3">
+                       <!-- Links werden hier dynamisch eingefügt -->
+                    </div>
                 </div>
             </main>
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2026 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 15:58 (Auto-Model-Switch)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:05 (Auto-Latest)</p>
         </footer>
     </div>
     
@@ -150,6 +153,7 @@
     const resultsContainer = document.getElementById('results-container');
     const resultLinks = document.getElementById('result-links');
     
+    // Modal elements
     const cameraModal = document.getElementById('camera-modal');
     const cameraPreviewImage = document.getElementById('camera-preview-image');
     const retakePhotoButton = document.getElementById('retake-photo-button');
@@ -374,7 +378,7 @@
                 reader.readAsDataURL(file);
             });
             
-            // Verwende die neue Fallback-Funktion
+            // Verwende die neue Fallback-Funktion mit Priorität auf "Latest"
             const data = await processFileWithFallback(file.type, base64);
             
             if (data) {
@@ -395,20 +399,20 @@
         fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
 
-    // NEU: Diese Funktion probiert mehrere Modelle durch
+    // NEU: Diese Funktion probiert mehrere Modelle durch, "Latest" ist Prio 1
     async function processFileWithFallback(mimeType, base64) {
-        // Liste der Modelle, die wir probieren wollen
+        // Liste der Modelle, die wir probieren wollen - Latest als erstes!
         const modelsToTry = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-flash-002',
-            'gemini-2.0-flash-exp'
+            'gemini-1.5-flash-latest', // Die empfohlene "Zukunftssichere" Variante
+            'gemini-1.5-flash',       // Der stabile Standard
+            'gemini-1.5-flash-002'    // Spezifischer Checkpoint
         ];
 
         for (const modelName of modelsToTry) {
             console.log(`Versuche Modell: ${modelName}...`);
             const data = await processFile(mimeType, base64, modelName);
             if (data) {
+                console.log(`Erfolg mit Modell: ${modelName}`);
                 return data; // Erfolg! Wir brechen die Schleife ab und geben die Daten zurück
             }
             // Wenn nicht erfolgreich, warten wir kurz und probieren das nächste Modell
