@@ -101,8 +101,8 @@
             </main>
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
-            <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 15:43 (Stable 1.5 Flash + Excel)</p>
+            <p>&copy; 2026 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 15:58 (Auto-Model-Switch)</p>
         </footer>
     </div>
     
@@ -373,20 +373,54 @@
                 reader.onload = e => r(e.target.result.split(',')[1]);
                 reader.readAsDataURL(file);
             });
-            const data = await processFile(file.type, base64);
+            
+            // Verwende die neue Fallback-Funktion
+            const data = await processFileWithFallback(file.type, base64);
+            
             if (data) {
                 if (i === 0) detectedLang = data.language;
-                allVocab.push(...data.vocabulary);
-                allSentences.push(...data.sentences);
+                if (data.vocabulary) allVocab.push(...data.vocabulary);
+                if (data.sentences) allSentences.push(...data.sentences);
             }
         }
+
+        if (allVocab.length === 0 && allSentences.length === 0) {
+             updateStatus('Keine Daten extrahiert. Überprüfe API-Key/Quota.', true, false);
+             return;
+        }
+
         updateStatus('Upload zu Google Drive...', false, true);
         await uploadCombinedData({ language: detectedLang, vocabulary: allVocab, sentences: allSentences });
-        updateStatus('Fertig!', false, false);
+        updateStatus(`Fertig! ${allVocab.length} Vokabeln & ${allSentences.length} Sätze.`, false, false);
         fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
+
+    // NEU: Diese Funktion probiert mehrere Modelle durch
+    async function processFileWithFallback(mimeType, base64) {
+        // Liste der Modelle, die wir probieren wollen
+        const modelsToTry = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-flash-002',
+            'gemini-2.0-flash-exp'
+        ];
+
+        for (const modelName of modelsToTry) {
+            console.log(`Versuche Modell: ${modelName}...`);
+            const data = await processFile(mimeType, base64, modelName);
+            if (data) {
+                return data; // Erfolg! Wir brechen die Schleife ab und geben die Daten zurück
+            }
+            // Wenn nicht erfolgreich, warten wir kurz und probieren das nächste Modell
+            await new Promise(r => setTimeout(r, 500));
+        }
+        
+        // Wenn wir hier ankommen, haben alle Modelle versagt
+        console.error("Alle Modelle fehlgeschlagen.");
+        return null;
+    }
     
-    async function processFile(mimeType, base64) {
+    async function processFile(mimeType, base64, modelName) {
         const payload = {
             contents: [{ parts: [
                 { text: "Extrahiere Sprache (english/french), Vokabeln (source/german) und Beispielsätze (source/german) als JSON." },
@@ -401,21 +435,24 @@
                 }}
             }
         };
-        // HIER WIRD AUF DIE STANDARD-FLASH VERSION 1.5 GESETZT (Hohe Limits)
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKeyInput.value.trim()}`;
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKeyInput.value.trim()}`;
+        
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
             if (!resp.ok) {
                  const errData = await resp.json().catch(() => ({}));
-                 throw new Error(errData.error?.message || resp.statusText);
+                 // Wir werfen keinen harten Fehler, damit die Schleife weiterlaufen kann, loggen es aber
+                 console.warn(`Modell ${modelName} fehlgeschlagen:`, errData);
+                 return null;
             }
             const result = await resp.json();
-            if (!result.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Keine Textantwort von KI");
+            if (!result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                return null;
+            }
             return JSON.parse(result.candidates[0].content.parts[0].text);
         } catch (e) { 
-            console.error(e); 
-            updateStatus(`Fehler: ${e.message}`, true, false);
-            await new Promise(r => setTimeout(r, 3000));
+            console.warn(`Fehler bei Modell ${modelName}:`, e);
             return null; 
         }
     }
@@ -515,6 +552,7 @@
         statusText.textContent = msg;
         statusText.className = isErr ? 'text-red-600 font-semibold' : 'text-gray-600';
         loader.classList.toggle('hidden', !showLoader);
+        statusText.classList.remove('hidden');
     }
 </script>
 </body>
