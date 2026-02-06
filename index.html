@@ -102,7 +102,7 @@
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 14:40 (Auto-Excel Export)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 26.11.25 22:00 (Robustes Fehlerhandling)</p>
         </footer>
     </div>
     
@@ -363,24 +363,34 @@
         resultLinks.innerHTML = '';
         let allVocab = [], allSentences = [], detectedLang = 'english';
 
-        for (let i = 0; i < fileQueue.length; i++) {
-            const file = fileQueue[i].file;
-            updateStatus(`[${i+1}/${fileQueue.length}] Analysiere: ${file.name}`, false, true);
+        const sortedQueue = fileQueue.sort((a, b) => a.timestamp - b.timestamp);
+
+        for (let i = 0; i < sortedQueue.length; i++) {
+            const file = sortedQueue[i].file;
+            updateStatus(`[${i+1}/${sortedQueue.length}] Analysiere: ${file.name}`, false, true);
             const base64 = await new Promise(r => {
                 const reader = new FileReader();
                 reader.onload = e => r(e.target.result.split(',')[1]);
                 reader.readAsDataURL(file);
             });
+            
             const data = await processFile(file.type, base64);
+            
             if (data) {
                 if (i === 0) detectedLang = data.language;
-                allVocab.push(...data.vocabulary);
-                allSentences.push(...data.sentences);
+                if (data.vocabulary) allVocab.push(...data.vocabulary);
+                if (data.sentences) allSentences.push(...data.sentences);
             }
         }
+
+        if (allVocab.length === 0 && allSentences.length === 0) {
+             updateStatus('Keine Daten extrahiert. Überprüfe API-Key/Quota.', true, false);
+             return;
+        }
+
         updateStatus('Upload zu Google Drive...', false, true);
         await uploadCombinedData({ language: detectedLang, vocabulary: allVocab, sentences: allSentences });
-        updateStatus('Fertig!', false, false);
+        updateStatus(`Fertig! ${allVocab.length} Vokabeln & ${allSentences.length} Sätze.`, false, false);
         fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
     
@@ -402,9 +412,19 @@
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKeyInput.value.trim()}`;
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+            if (!resp.ok) {
+                 const errData = await resp.json().catch(() => ({}));
+                 throw new Error(errData.error?.message || resp.statusText);
+            }
             const result = await resp.json();
+            if (!result.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Keine Textantwort von KI");
             return JSON.parse(result.candidates[0].content.parts[0].text);
-        } catch (e) { console.error(e); return null; }
+        } catch (e) { 
+            console.error(e); 
+            updateStatus(`Fehler: ${e.message}`, true, false);
+            await new Promise(r => setTimeout(r, 3000));
+            return null; 
+        }
     }
 
     async function getNextFileNumber(folderId) {
