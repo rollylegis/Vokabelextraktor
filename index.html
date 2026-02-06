@@ -28,7 +28,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        /* Stellt sicher, dass das Cropper-Bild nicht zu groß wird */
         #camera-preview-image-container > img {
             max-width: 100%;
         }
@@ -39,7 +38,7 @@
         <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
             <header class="text-center mb-6">
                 <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Vokabelextraktor</h1>
-                <p class="text-gray-600 mt-2">Extrahiere Vokabeln aus Bildern oder PDFs und speichere sie direkt in Google Sheets.</p>
+                <p class="text-gray-600 mt-2">Extrahiere Vokabeln aus Bildern oder PDFs und speichere sie direkt in Google Sheets & Excel.</p>
             </header>
 
             <div id="auth-container" class="text-center">
@@ -63,7 +62,7 @@
                     <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
                     
                     <label for="upload-input" class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg text-center transition duration-300 flex items-center justify-center space-x-2">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" cy="3" x2="12" y2="15"></line></svg>
                         <span>Dateien hochladen</span>
                     </label>
                     <input type="file" id="upload-input" accept="image/*,application/pdf" class="hidden" multiple>
@@ -97,15 +96,13 @@
 
                 <div id="results-container" class="mt-6 text-center hidden">
                     <h2 class="text-xl font-semibold mb-3">Ergebnisse</h2>
-                    <div id="result-links" class="space-y-3">
-                       <!-- Links werden hier dynamisch eingefügt -->
-                    </div>
+                    <div id="result-links" class="space-y-3"></div>
                 </div>
             </main>
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2025 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 28.11.25 15:30 (Gemini 2.5)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 14:40 (Auto-Excel Export)</p>
         </footer>
     </div>
     
@@ -129,12 +126,8 @@
     window.onload = function() {
         const savedApiKey = localStorage.getItem('vokabelAppApiKey');
         const savedClientId = localStorage.getItem('vokabelAppClientId');
-        if (savedApiKey) {
-            apiKeyInput.value = savedApiKey;
-        }
-        if (savedClientId) {
-            clientIdInput.value = savedClientId;
-        }
+        if (savedApiKey) apiKeyInput.value = savedApiKey;
+        if (savedClientId) clientIdInput.value = savedClientId;
     };
 
     const authorizeButton = document.getElementById('authorize_button');
@@ -157,7 +150,6 @@
     const resultsContainer = document.getElementById('results-container');
     const resultLinks = document.getElementById('result-links');
     
-    // Modal elements
     const cameraModal = document.getElementById('camera-modal');
     const cameraPreviewImage = document.getElementById('camera-preview-image');
     const retakePhotoButton = document.getElementById('retake-photo-button');
@@ -170,13 +162,18 @@
     let fileQueue = [];
     let cropper;
     
-    const SCOPES = 'https://www.googleapis.com/auth/drive';
+    const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
 
     authorizeButton.onclick = handleAuthClick;
     signoutButton.onclick = handleSignoutClick;
 
     gapi.load('client', initializeGapiClient);
     
+    function initializeGisClient() {
+        gisInited = true;
+        maybeEnableButtons();
+    }
+
     const gsiScript = document.createElement('script');
     gsiScript.src = 'https://accounts.google.com/gsi/client';
     gsiScript.async = true;
@@ -192,11 +189,6 @@
             ],
         });
         gapiInited = true;
-        maybeEnableButtons();
-    }
-
-    function initializeGisClient() {
-        gisInited = true;
         maybeEnableButtons();
     }
 
@@ -218,8 +210,6 @@
                 callback: (resp) => {
                     if (resp.error === undefined) {
                         updateUIVisibility(true);
-                    } else {
-                        console.log('Stille Anmeldung fehlgeschlagen. Manuelle Anmeldung erforderlich.');
                     }
                 },
             });
@@ -231,10 +221,9 @@
         const apiKey = apiKeyInput.value.trim();
         const clientId = clientIdInput.value.trim();
         if (!apiKey || !clientId) {
-            updateStatus('Bitte gib zuerst deinen API Key und deine Client ID ein.', true);
+            updateStatus('Bitte gib API Key und Client ID ein.', true);
             return;
         }
-
         localStorage.setItem('vokabelAppApiKey', apiKey);
         localStorage.setItem('vokabelAppClientId', clientId);
 
@@ -244,8 +233,7 @@
             scope: SCOPES,
             callback: (resp) => { 
                 if (resp.error !== undefined) {
-                    console.error('Authentication error:', resp);
-                    updateStatus(`Anmeldefehler: ${resp.error_description || resp.error}`, true);
+                    updateStatus(`Anmeldefehler: ${resp.error}`, true);
                     return;
                 }
                 updateUIVisibility(true);
@@ -255,11 +243,6 @@
     }
 
     function handleSignoutClick() {
-        localStorage.removeItem('vokabelAppApiKey');
-        localStorage.removeItem('vokabelAppClientId');
-        apiKeyInput.value = '';
-        clientIdInput.value = '';
-
         const token = gapi.client.getToken();
         if (token !== null) {
             google.accounts.oauth2.revoke(token.access_token);
@@ -274,14 +257,12 @@
             appContainer.classList.remove('hidden');
             signoutButton.classList.remove('hidden');
             authorizeButton.classList.add('hidden');
-            updateStatus('Anmeldung erfolgreich! Du kannst jetzt Dateien hochladen.');
+            updateStatus('Bereit für Uploads!');
         } else {
             authContainer.classList.remove('hidden');
             appContainer.classList.add('hidden');
             signoutButton.classList.add('hidden');
             authorizeButton.classList.remove('hidden');
-            updateStatus('Du wurdest abgemeldet.');
-            resultsContainer.classList.add('hidden');
         }
     }
 
@@ -290,410 +271,237 @@
     pasteButton.addEventListener('click', handlePaste);
     startProcessingButton.addEventListener('click', processQueue);
     clearQueueButton.addEventListener('click', clearQueue);
-    
-    // Modal button listeners
     retakePhotoButton.addEventListener('click', () => cameraInput.click());
     addSelectionToQueueButton.addEventListener('click', addSelectionToQueue);
     finishSelectionButton.addEventListener('click', closeCameraModal);
 
-
     function handleCameraInput(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (e) => {
             cameraPreviewImage.src = e.target.result;
             cameraModal.classList.remove('hidden');
-            
-            if (cropper) {
-                cropper.destroy();
-            }
-
-            cropper = new Cropper(cameraPreviewImage, {
-                aspectRatio: NaN, // Free crop
-                viewMode: 1,      // Prevent crop box from extending beyond the canvas
-                background: false,
-            });
+            if (cropper) cropper.destroy();
+            cropper = new Cropper(cameraPreviewImage, { aspectRatio: NaN, viewMode: 1, background: false });
         };
         reader.readAsDataURL(file);
     }
 
     function addSelectionToQueue() {
         if (!cropper) return;
-        cropper.getCroppedCanvas({
-            imageSmoothingQuality: 'high',
-        }).toBlob((blob) => {
+        cropper.getCroppedCanvas({ imageSmoothingQuality: 'high' }).toBlob((blob) => {
             const file = new File([blob], `camera-selection-${Date.now()}.png`, { type: 'image/png' });
             addFilesToQueue([file]);
-            // Give user feedback
-            const originalButtonText = addSelectionToQueueButton.innerHTML;
+            const originalText = addSelectionToQueueButton.innerHTML;
             addSelectionToQueueButton.innerHTML = '<span>Hinzugefügt!</span>';
-            addSelectionToQueueButton.classList.add('bg-green-500', 'hover:bg-green-600');
-            setTimeout(() => {
-                addSelectionToQueueButton.innerHTML = originalButtonText;
-                addSelectionToQueueButton.classList.remove('bg-green-500', 'hover:bg-green-600');
-            }, 1000);
+            setTimeout(() => { addSelectionToQueueButton.innerHTML = originalText; }, 1000);
         }, 'image/png');
     }
 
     function closeCameraModal() {
         cameraModal.classList.add('hidden');
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-        }
-        cameraPreviewImage.src = '';
+        if (cropper) { cropper.destroy(); cropper = null; }
         cameraInput.value = '';
     }
 
     async function handlePaste() {
         try {
-            if (!navigator.clipboard?.read) {
-                 updateStatus('Dein Browser unterstützt das Einfügen aus der Zwischenablage nicht.', true);
-                 return;
-            }
-            const clipboardItems = await navigator.clipboard.read();
-            let imageBlob = null;
-            for (const item of clipboardItems) {
-                const imageType = item.types.find(type => type.startsWith('image/'));
-                if (imageType) {
-                    imageBlob = await item.getType(imageType);
-                    break;
+            if (!navigator.clipboard?.read) return;
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                const type = item.types.find(t => t.startsWith('image/'));
+                if (type) {
+                    const blob = await item.getType(type);
+                    addFilesToQueue([new File([blob], "clipboard-image.png", { type: blob.type })]);
+                    return;
                 }
             }
-            if (imageBlob) {
-                const file = new File([imageBlob], "clipboard-image.png", { type: imageBlob.type });
-                addFilesToQueue([file]);
-            } else {
-                updateStatus('Kein Bild in der Zwischenablage gefunden.', true);
-            }
-        } catch (error) {
-            console.error('Fehler beim Einfügen:', error);
-            updateStatus(`Fehler beim Zugriff auf die Zwischenablage: ${error.message}`, true);
-        }
+        } catch (e) { console.error(e); }
     }
 
     function addFilesToQueue(fileList) {
-        if (!fileList || fileList.length === 0) return;
-        const files = Array.from(fileList);
-        for (const file of files) {
-            fileQueue.push({ file: file, timestamp: new Date() });
-        }
+        if (!fileList) return;
+        Array.from(fileList).forEach(f => fileQueue.push({ file: f, timestamp: new Date() }));
         updateQueuePreview();
     }
 
-    function removeFromQueue(indexToRemove) {
-        fileQueue.splice(indexToRemove, 1);
+    function removeFromQueue(index) {
+        fileQueue.splice(index, 1);
         updateQueuePreview();
     }
 
     async function updateQueuePreview() {
         previewsWrapper.innerHTML = '';
         previewContainer.classList.toggle('hidden', fileQueue.length === 0);
-
-        fileQueue.forEach(async (item, index) => {
-            if (item.file.type.startsWith('image/')) {
-                const previewWrapper = document.createElement('div');
-                previewWrapper.className = 'relative flex-shrink-0';
-                
-                const base64Data = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
-                    reader.readAsDataURL(item.file);
-                });
-                
-                const img = document.createElement('img');
-                img.src = base64Data;
-                img.alt = `Vorschau ${item.file.name}`;
-                img.className = "max-h-32 rounded-lg shadow-md";
-                
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>';
-                deleteBtn.className = "absolute top-0 right-0 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold -translate-y-1/2 translate-x-1/2 shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50";
-                deleteBtn.setAttribute('aria-label', 'Aus der Warteschlange entfernen');
-                deleteBtn.onclick = () => removeFromQueue(index);
-                
-                previewWrapper.appendChild(img);
-                previewWrapper.appendChild(deleteBtn);
-                previewsWrapper.appendChild(previewWrapper);
-            }
-        });
-
-        if (fileQueue.length > 0) {
-            updateStatus(`${fileQueue.length} Datei(en) zur Verarbeitung bereit.`);
-            startProcessingButton.classList.remove('hidden');
-            clearQueueButton.classList.remove('hidden');
-        } else {
-            updateStatus('Bitte wähle eine oder mehrere Dateien aus.');
-            startProcessingButton.classList.add('hidden');
-            clearQueueButton.classList.add('hidden');
+        for (let i=0; i<fileQueue.length; i++) {
+            const item = fileQueue[i];
+            const div = document.createElement('div');
+            div.className = 'relative';
+            const img = document.createElement('img');
+            img.className = "max-h-32 rounded-lg shadow-md";
+            const reader = new FileReader();
+            reader.onload = (e) => img.src = e.target.result;
+            reader.readAsDataURL(item.file);
+            const btn = document.createElement('button');
+            btn.innerHTML = 'X';
+            btn.className = "absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 text-xs font-bold shadow-md";
+            btn.onclick = () => removeFromQueue(i);
+            div.appendChild(img);
+            div.appendChild(btn);
+            previewsWrapper.appendChild(div);
         }
+        startProcessingButton.classList.toggle('hidden', fileQueue.length === 0);
+        clearQueueButton.classList.toggle('hidden', fileQueue.length === 0);
     }
     
-    function clearQueue() {
-        fileQueue = [];
-        updateQueuePreview();
-    }
+    function clearQueue() { fileQueue = []; updateQueuePreview(); }
 
     async function processQueue() {
         if (fileQueue.length === 0) return;
-        
         resultsContainer.classList.add('hidden');
         resultLinks.innerHTML = '';
-        
-        const sortedQueue = fileQueue.sort((a, b) => a.timestamp - b.timestamp);
-        let allVocabulary = [];
-        let allSentences = [];
-        let detectedLanguage = 'english'; // Default language
+        let allVocab = [], allSentences = [], detectedLang = 'english';
 
-        for (let i = 0; i < sortedQueue.length; i++) {
-            const item = sortedQueue[i];
-            const file = item.file;
-            updateStatus(`[${i + 1}/${sortedQueue.length}] Analysiere: ${file.name}`, false, true);
-            
-            const base64Data = await new Promise((resolve, reject) => {
+        for (let i = 0; i < fileQueue.length; i++) {
+            const file = fileQueue[i].file;
+            updateStatus(`[${i+1}/${fileQueue.length}] Analysiere: ${file.name}`, false, true);
+            const base64 = await new Promise(r => {
                 const reader = new FileReader();
-                reader.onload = e => resolve(e.target.result);
-                reader.onerror = err => reject(err);
+                reader.onload = e => r(e.target.result.split(',')[1]);
                 reader.readAsDataURL(file);
             });
-            
-            const data = await processFile(file, base64Data);
+            const data = await processFile(file.type, base64);
             if (data) {
-                if (i === 0) { // Set language from the first successfully processed file
-                    detectedLanguage = data.language;
-                }
-                allVocabulary.push(...data.vocabulary);
+                if (i === 0) detectedLang = data.language;
+                allVocab.push(...data.vocabulary);
                 allSentences.push(...data.sentences);
             }
         }
-        
-        updateStatus('Alle Dateien analysiert. Starte Upload zu Google Drive...', false, true);
-
-        await uploadCombinedData({
-            language: detectedLanguage,
-            vocabulary: allVocabulary,
-            sentences: allSentences
-        });
-
-        updateStatus(`Alle ${sortedQueue.length} Dateien erfolgreich verarbeitet!`, false, false);
-        fileQueue = [];
-        updateQueuePreview(); // To hide buttons and clear preview
-        customFilenameInput.value = ''; 
+        updateStatus('Upload zu Google Drive...', false, true);
+        await uploadCombinedData({ language: detectedLang, vocabulary: allVocab, sentences: allSentences });
+        updateStatus('Fertig!', false, false);
+        fileQueue = []; updateQueuePreview(); customFilenameInput.value = '';
     }
     
-    async function processFile(file, base64Data) {
-        const pureBase64 = base64Data.split(',')[1];
-        const systemPrompt = `Du bist ein Assistent zur Vokabelextraktion. Deine Aufgabe ist es, aus einer Datei (Bild oder PDF) Vokabeln und Beispielsätze zu extrahieren.
-1.  Identifiziere ZUERST die Ausgangssprache des Textes. Es kann nur 'english' oder 'french' sein.
-2.  Extrahiere die Vokabeln und ihre deutsche Übersetzung.
-3.  Extrahiere die Beispielsätze UND ÜBERSETZE JEDEN SATZ INS DEUTSCHE.
-4.  Gib das Ergebnis IMMER im JSON-Format zurück, das dem angegebenen Schema entspricht. Das 'source'-Feld enthält den Originaltext, das 'german'-Feld die deutsche Übersetzung. Wenn nichts gefunden wird, gib leere Listen und 'english' als Standardsprache zurück.`;
-        
-        const userQuery = "Extrahiere die Sprache, Vokabeln und Beispielsätze aus der folgenden Datei.";
-        
+    async function processFile(mimeType, base64) {
         const payload = {
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ parts: [ { text: userQuery }, { inlineData: { mimeType: file.type, data: pureBase64 } } ] }],
-            generationConfig: {
+            contents: [{ parts: [
+                { text: "Extrahiere Sprache (english/french), Vokabeln (source/german) und Beispielsätze (source/german) als JSON." },
+                { inlineData: { mimeType, data: base64 } }
+            ]}],
+            generationConfig: { 
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: "OBJECT",
-                    properties: {
-                        "language": { "type": "STRING", "enum": ["english", "french"] },
-                        "vocabulary": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } },
-                        "sentences": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } }
-                    }
-                }
+                responseSchema: { type: "OBJECT", properties: {
+                    "language": { "type": "STRING", "enum": ["english", "french"] },
+                    "vocabulary": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } },
+                    "sentences": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "source": { "type": "STRING" }, "german": { "type": "STRING" } } } }
+                }}
             }
         };
-
-        // MODELL: gemini-2.5-flash-preview-09-2025 (Aktuellste Preview)
-        const GEMINI_API_KEY = apiKeyInput.value.trim();
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
-        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKeyInput.value.trim()}`;
         try {
-            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) {
-                const errorData = await response.json();
-                // Detaillierte Fehlermeldung im Konsolen-Log
-                console.error("API Error Details:", errorData);
-                throw new Error(`API-Fehler: ${errorData.error.message} (Code: ${errorData.error.code})`);
-            }
-            const result = await response.json();
-            const candidate = result?.candidates?.[0];
-            const jsonText = candidate?.content?.parts?.[0]?.text;
-            if (!jsonText) {
-                let errorMessage = "Konnte keine strukturierte Antwort von der KI erhalten.";
-                if(candidate?.finishReason && candidate.finishReason !== 'STOP'){ errorMessage += ` Grund: ${candidate.finishReason}`; }
-                throw new Error(errorMessage);
-            }
-            return JSON.parse(jsonText);
-        } catch (error) {
-            console.error("Verarbeitungsfehler:", error);
-            updateStatus(`Fehler bei der Dateianalyse von ${file.name}: ${error.message}`, true, false);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            return null; // Return null on error to continue queue processing
-        }
+            const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await resp.json();
+            return JSON.parse(result.candidates[0].content.parts[0].text);
+        } catch (e) { console.error(e); return null; }
     }
 
     async function getNextFileNumber(folderId) {
-        const response = await gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and trashed=false`,
-            fields: 'files(name)',
-            pageSize: 1000
+        const resp = await gapi.client.drive.files.list({ q: `'${folderId}' in parents and trashed=false`, fields: 'files(name)' });
+        let max = 0;
+        resp.result.files.forEach(f => {
+            const m = f.name.match(/^(\d+)\s*-.*/);
+            if (m) max = Math.max(max, parseInt(m[1]));
         });
-        const files = response.result.files;
-        let maxNumber = 0;
-        if (files && files.length > 0) {
-            for (const file of files) {
-                const match = file.name.match(/^(\d+)\s*-.*/);
-                if (match && match[1]) {
-                    const currentNumber = parseInt(match[1], 10);
-                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
-                        maxNumber = currentNumber;
-                    }
-                }
-            }
-        }
-        return maxNumber;
+        return max;
     }
 
-    async function findFolder(name, parentId) {
-        const response = await gapi.client.drive.files.list({
-            q: `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${name}' and '${parentId}' in parents`,
-            fields: 'files(id, name)',
-        });
-        const files = response.result.files;
-        return (files && files.length > 0) ? files[0].id : null;
-    }
-
-    async function createFolder(name, parentId) {
-        const fileMetadata = { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] };
-        const response = await gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' });
-        return response.result.id;
-    }
-
-    async function getOrCreateFolderIdByPath(path) {
-        const folderNames = path.split('/').filter(name => name.length > 0);
+    async function getOrCreateFolderId(path) {
         let parentId = 'root';
-        for (const name of folderNames) {
-            let folderId = await findFolder(name, parentId);
-            if (!folderId) {
-                folderId = await createFolder(name, parentId);
+        for (const name of path.split('/')) {
+            const resp = await gapi.client.drive.files.list({ q: `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false` });
+            if (resp.result.files.length > 0) parentId = resp.result.files[0].id;
+            else {
+                const created = await gapi.client.drive.files.create({ resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }, fields: 'id' });
+                parentId = created.result.id;
             }
-            parentId = folderId;
         }
         return parentId;
     }
 
-    async function findSheet(name, parentId) {
-        const response = await gapi.client.drive.files.list({
-            q: `mimeType='application/vnd.google-apps.spreadsheet' and trashed=false and name='${name}' and '${parentId}' in parents`,
-            fields: 'files(id, name)',
-        });
-        const files = response.result.files;
-        return (files && files.length > 0) ? files[0].id : null;
+    async function appendToSheet(id, values) {
+        await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: id, range: 'A1', valueInputOption: 'USER_ENTERED', resource: { values } });
     }
 
-    async function createSheet(title, parentFolderId) {
-        const fileMetadata = { name: title, parents: [parentFolderId], mimeType: 'application/vnd.google-apps.spreadsheet' };
-        const response = await gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' });
-        return response.result.id;
-    }
+    async function exportToExcel(sheetId, sheetName, folderId) {
+        updateStatus(`Erstelle Excel-Backup: ${sheetName}.xlsx`, false, true);
+        const accessToken = gapi.auth.getToken().access_token;
+        const exportUrl = `https://www.googleapis.com/drive/v3/files/${sheetId}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`;
+        
+        try {
+            const resp = await fetch(exportUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+            const blob = await resp.blob();
+            
+            const metadata = { name: `${sheetName}.xlsx`, parents: [folderId], mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+            const formData = new FormData();
+            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            formData.append('file', blob);
 
-    function getFormattedDate() {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0'); // Monate sind nullbasiert
-        const day = String(today.getDate()).padStart(2, '0');
-        return `${year}.${month}.${day}`;
+            await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: formData
+            });
+        } catch (e) { console.error("Excel Export fehlgeschlagen:", e); }
     }
 
     async function uploadCombinedData(data) {
         try {
             const customName = customFilenameInput.value.trim();
-            // GEÄNDERTER PFAD
-            const folderPath = 'Schule Kinder/Vokabeln/SCAN aus APP';
-            updateStatus('Suche/Erstelle Zielordner in Google Drive...', false, true);
-            const targetFolderId = await getOrCreateFolderIdByPath(folderPath);
-            
-            let vocabSheetName;
-            let sentencesSheetName;
-            
+            const folderId = await getOrCreateFolderId('Schule Kinder/Vokabeln/SCAN aus APP');
             const langPrefix = data.language === 'french' ? 'FR-DE' : 'ENG-DE';
-            const today = getFormattedDate();
+            const today = new Date().toISOString().split('T')[0].replace(/-/g, '.');
 
+            let vName, sName;
             if (customName) {
-                updateStatus('Ermittle nächste Dateinummer...', false, true);
-                const nextNumber = await getNextFileNumber(targetFolderId) + 1;
-                const formattedNumber = String(nextNumber).padStart(2, '0');
-                vocabSheetName = `${formattedNumber} - ${customName}`;
-                sentencesSheetName = `${formattedNumber} - ${customName} - Sätze`;
+                const nextNum = String(await getNextFileNumber(folderId) + 1).padStart(2, '0');
+                vName = `${nextNum} - ${customName}`;
+                sName = `${nextNum} - ${customName} - Sätze`;
             } else {
-                vocabSheetName = `${langPrefix} - Meine Vokabelliste - ${today}`;
-                sentencesSheetName = `${langPrefix} - Meine Sätze - ${today}`;
+                vName = `${langPrefix} - Vokabeln - ${today}`;
+                sName = `${langPrefix} - Sätze - ${today}`;
             }
 
-            // Vokabeln verarbeiten
-            if (data.vocabulary && data.vocabulary.length > 0) {
-                updateStatus('Lade Vokabeln hoch...', false, true);
-                let sheetId = await findSheet(vocabSheetName, targetFolderId);
-                if (!sheetId) {
-                    sheetId = await createSheet(vocabSheetName, targetFolderId);
-                }
-                const values = data.vocabulary.map(v => [v.source, v.german]);
-                await appendData(sheetId, values);
-                updateResultLink(sheetId, vocabSheetName, "vocab");
+            if (data.vocabulary.length > 0) {
+                const sheet = await gapi.client.drive.files.create({ resource: { name: vName, parents: [folderId], mimeType: 'application/vnd.google-apps.spreadsheet' }, fields: 'id' });
+                await appendToSheet(sheet.result.id, data.vocabulary.map(v => [v.source, v.german]));
+                await exportToExcel(sheet.result.id, vName, folderId); // AUTO EXCEL EXPORT
+                addResultLink(sheet.result.id, vName);
             }
-
-            // Sätze verarbeiten
-            if (data.sentences && data.sentences.length > 0) {
-                updateStatus('Lade Sätze hoch...', false, true);
-                let sheetId = await findSheet(sentencesSheetName, targetFolderId);
-                 if (!sheetId) {
-                    sheetId = await createSheet(sentencesSheetName, targetFolderId);
-                }
-                const values = data.sentences.map(s => [s.source, s.german]);
-                await appendData(sheetId, values);
-                updateResultLink(sheetId, sentencesSheetName, "sentence");
+            if (data.sentences.length > 0) {
+                const sheet = await gapi.client.drive.files.create({ resource: { name: sName, parents: [folderId], mimeType: 'application/vnd.google-apps.spreadsheet' }, fields: 'id' });
+                await appendToSheet(sheet.result.id, data.sentences.map(s => [s.source, s.german]));
+                await exportToExcel(sheet.result.id, sName, folderId); // AUTO EXCEL EXPORT
+                addResultLink(sheet.result.id, sName);
             }
-            
-            if (data.vocabulary.length > 0 || data.sentences.length > 0) {
-                 resultsContainer.classList.remove('hidden');
-            }
-
-        } catch (error) {
-            console.error(error);
-            const errorMessage = error.result ? error.result.error.message : error.message;
-            updateStatus(`Fehler beim Google Sheets Upload: ${errorMessage}`, true);
-        }
+            resultsContainer.classList.remove('hidden');
+        } catch (e) { updateStatus(`Fehler: ${e.message}`, true); }
     }
 
-    function updateResultLink(sheetId, sheetName, type) {
-        const linkId = `${type}-link-${sheetId}`;
-        let link = document.getElementById(linkId);
-        if (!link) {
-            link = document.createElement('a');
-            link.id = linkId;
-            link.target = "_blank";
-            link.className = "block bg-green-100 text-green-800 p-3 rounded-lg hover:bg-green-200 transition duration-300";
-            resultLinks.appendChild(link);
-        }
-        link.href = `https://docs.google.com/spreadsheets/d/${sheetId}/`;
-        link.textContent = `${sheetName} öffnen`;
+    function addResultLink(id, name) {
+        const a = document.createElement('a');
+        a.href = `https://docs.google.com/spreadsheets/d/${id}/`;
+        a.target = "_blank";
+        a.className = "block bg-green-100 text-green-800 p-3 rounded-lg hover:bg-green-200 transition mb-2";
+        a.textContent = `${name} öffnen`;
+        resultLinks.appendChild(a);
     }
 
-    async function appendData(spreadsheetId, values) {
-        await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: spreadsheetId, range: 'A1', valueInputOption: 'USER_ENTERED', resource: { values: values } });
-    }
-
-    function updateStatus(message, isError = false, showLoaderState = false) {
-        statusText.textContent = message;
-        statusText.className = isError ? 'text-red-600 font-semibold' : 'text-gray-600';
-        loader.classList.toggle('hidden', !showLoaderState);
-        statusText.classList.remove('hidden');
+    function updateStatus(msg, isErr, showLoader) {
+        statusText.textContent = msg;
+        statusText.className = isErr ? 'text-red-600 font-semibold' : 'text-gray-600';
+        loader.classList.toggle('hidden', !showLoader);
     }
 </script>
 </body>
