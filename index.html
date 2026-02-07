@@ -102,7 +102,7 @@
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2026 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:30 (Gemini 3.0 Flash Preview)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:30 (Gemini 3.0 + Force Translation)</p>
         </footer>
     </div>
     
@@ -394,9 +394,17 @@
     }
     
     async function processFile(mimeType, base64) {
+        // ANGEPASSTER PROMPT FÜR ERZWUNGENE ÜBERSETZUNG
+        const systemPrompt = `Du bist ein Assistent zur Vokabelextraktion. Deine Aufgabe ist es, aus einer Datei (Bild oder PDF) Vokabeln und Beispielsätze zu extrahieren.
+    1. Identifiziere ZUERST die Ausgangssprache (english oder french).
+    2. Extrahiere Vokabeln: Das 'source'-Feld ist das Fremdwort, 'german' ist die deutsche Bedeutung aus dem Bild.
+    3. Extrahiere Beispielsätze: Das 'source'-Feld ist der Satz im Bild. Das 'german'-Feld ist die deutsche Übersetzung.
+    4. KRITISCHE REGEL: Falls für einen Satz oder eine Vokabel KEINE deutsche Übersetzung im Bild steht, MUSST du sie selbst generieren. Das Feld 'german' darf NIEMALS leer sein!
+    5. Gib das Ergebnis IMMER im JSON-Format zurück.`;
+
         const payload = {
             contents: [{ parts: [
-                { text: "Extrahiere Sprache (english/french), Vokabeln (source/german) und Beispielsätze (source/german) als JSON." },
+                { text: systemPrompt },
                 { inlineData: { mimeType, data: base64 } }
             ]}],
             generationConfig: { 
