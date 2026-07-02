@@ -102,7 +102,7 @@
         </div>
         <footer class="text-center mt-4 text-sm text-gray-500">
             <p>&copy; 2026 Vokabelextraktor. Erstellt mit Gemini & Google Sheets API.</p>
-            <p class="text-xs mt-1 text-gray-400">Version: 06.02.26 16:30 (Gemini 3.0 + Force Translation)</p>
+            <p class="text-xs mt-1 text-gray-400">Version: 02.07.26 (Gemini 3.0 Pro + Fehler-Logging)</p>
         </footer>
     </div>
     
@@ -383,7 +383,7 @@
         }
         
         if (allVocab.length === 0 && allSentences.length === 0) {
-             updateStatus('Keine Daten extrahiert. Überprüfe API-Key/Quota.', true, false);
+             updateStatus('Keine Daten extrahiert. Überprüfe Konsole (F12) für API-Fehler.', true, false);
              return;
         }
 
@@ -394,7 +394,6 @@
     }
     
     async function processFile(mimeType, base64) {
-        // ANGEPASSTER PROMPT FÜR ERZWUNGENE ÜBERSETZUNG
         const systemPrompt = `Du bist ein Assistent zur Vokabelextraktion. Deine Aufgabe ist es, aus einer Datei (Bild oder PDF) Vokabeln und Beispielsätze zu extrahieren.
     1. Identifiziere ZUERST die Ausgangssprache (english oder french).
     2. Extrahiere Vokabeln: Das 'source'-Feld ist das Fremdwort, 'german' ist die deutsche Bedeutung aus dem Bild.
@@ -416,21 +415,24 @@
                 }}
             }
         };
-        // HIER: KNALLHARTES GEMINI 3 FLASH PREVIEW
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKeyInput.value.trim()}`;
+        
+        // HIER: Geändert auf gemini-3.0-pro für beste Qualität
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent?key=${apiKeyInput.value.trim()}`;
+        
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
             if (!resp.ok) {
                  const errData = await resp.json().catch(() => ({}));
-                 throw new Error(errData.error?.message || resp.statusText);
+                 // Erweitertes Logging für die Fehlersuche
+                 console.error("Gemini API Fehler Details:", errData);
+                 throw new Error(errData.error?.message || `HTTP ${resp.status}: ${resp.statusText}`);
             }
             const result = await resp.json();
             if (!result.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Keine Textantwort von KI");
             return JSON.parse(result.candidates[0].content.parts[0].text);
         } catch (e) { 
-            console.error(e); 
+            console.error("Gesamter Fehler beim API-Aufruf:", e); 
             updateStatus(`Fehler: ${e.message}`, true, false);
-            // Längere Pause bei Fehler, damit User es lesen kann
             await new Promise(r => setTimeout(r, 5000));
             return null; 
         }
