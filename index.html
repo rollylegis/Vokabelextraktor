@@ -417,7 +417,7 @@
             }
         };
         // HIER: KNALLHARTES GEMINI 3 FLASH PREVIEW
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKeyInput.value.trim()}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${apiKeyInput.value.trim()}`;
         try {
             const resp = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
             if (!resp.ok) {
